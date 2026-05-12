@@ -3,10 +3,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ config('app.name', 'Laravel') }} - Jawa Barat GIS PoC</title>
-    <link rel="preconnect" href="https://cdn.jsdelivr.net">
-    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.3.0/dist/maplibre-gl.css">
-    <script src="https://unpkg.com/maplibre-gl@5.3.0/dist/maplibre-gl.js"></script>
+    <title>Jawa Barat GIS PoC</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.5.0/dist/maplibre-gl.css">
+    <script src="https://unpkg.com/maplibre-gl@5.5.0/dist/maplibre-gl.js"></script>
     <script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
     <style>
         :root {
@@ -50,24 +49,10 @@
             backdrop-filter: blur(14px);
         }
 
-        .brand h1 {
-            margin: 0;
-            font-size: 18px;
-            font-weight: 800;
-        }
+        .brand h1 { margin: 0; font-size: 18px; font-weight: 800; }
+        .brand p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 
-        .brand p {
-            margin: 4px 0 0;
-            color: var(--muted);
-            font-size: 13px;
-        }
-
-        .statusbar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-            justify-content: flex-end;
-        }
+        .statusbar { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 
         .pill {
             display: inline-flex;
@@ -81,18 +66,17 @@
         }
 
         .dot {
-            width: 8px;
-            height: 8px;
+            width: 8px; height: 8px;
             border-radius: 999px;
             background: var(--accent);
             box-shadow: 0 0 18px rgba(68, 197, 142, 0.85);
         }
 
         .layout {
-            min-height: 0;
             display: grid;
             grid-template-columns: 376px minmax(0, 1fr);
-            height: 100%;
+            height: calc(100vh - 73px);
+            overflow: hidden;
         }
 
         .sidebar {
@@ -111,15 +95,8 @@
             box-shadow: 0 20px 44px rgba(0, 0, 0, 0.22);
         }
 
-        .panel h2 {
-            margin: 0 0 10px;
-            font-size: 14px;
-            letter-spacing: .3px;
-        }
-
-        .panel small,
-        .panel p,
-        .meta { color: var(--muted); }
+        .panel h2 { margin: 0 0 10px; font-size: 14px; letter-spacing: .3px; }
+        .panel small, .panel p, .meta { color: var(--muted); }
 
         .stack { display: flex; flex-direction: column; gap: 10px; }
         .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -142,9 +119,7 @@
         }
 
         button {
-            cursor: pointer;
-            font-weight: 700;
-            border: none;
+            cursor: pointer; font-weight: 700; border: none;
             background: linear-gradient(135deg, var(--accent-2), var(--accent));
             transition: transform .15s ease, opacity .15s ease;
         }
@@ -157,11 +132,7 @@
             border: 1px solid var(--line);
         }
 
-        .list {
-            display: grid;
-            gap: 8px;
-            font-size: 13px;
-        }
+        .list { display: grid; gap: 8px; font-size: 13px; }
 
         .item {
             padding: 10px 12px;
@@ -170,17 +141,13 @@
             background: rgba(255, 255, 255, 0.03);
         }
 
-        .map-wrap {
-            position: relative;
-            min-height: 0;
-            height: 100%;
-        }
+        .map-wrap { position: relative; overflow: hidden; }
         #map { position: absolute; inset: 0; }
+        #map canvas { outline: none; }
 
         .overlay {
             position: absolute;
-            left: 16px;
-            bottom: 16px;
+            left: 16px; bottom: 16px;
             width: min(440px, calc(100% - 32px));
             z-index: 5;
         }
@@ -197,16 +164,11 @@
         }
 
         .banner code {
-            padding: 2px 6px;
-            border-radius: 8px;
+            padding: 2px 6px; border-radius: 8px;
             background: rgba(255, 255, 255, 0.08);
         }
 
-        .notice {
-            margin-top: 8px;
-            color: #d8e7ff;
-            font-size: 12px;
-        }
+        .notice { margin-top: 8px; color: #d8e7ff; font-size: 12px; }
 
         .maplibregl-popup-content {
             background: rgba(4, 9, 17, 0.97);
@@ -260,7 +222,7 @@
                     </div>
                     <div>
                         <label for="geojsonFiles">Files GeoJSON / JSON</label>
-                        <input id="geojsonFiles" name="files" type="file" accept=".geojson,.json,application/geo+json,application/json" multiple required>
+                        <input id="geojsonFiles" name="files[]" type="file" accept=".geojson,.json,application/geo+json,application/json" multiple required>
                     </div>
                     <button type="submit" id="importButton">Upload & generate PMTiles</button>
                     <small>Semua file akan dikirim ke <code>/api/pmtiles/import</code>.</small>
@@ -320,7 +282,7 @@
             <div class="overlay">
                 <div class="banner">
                     <strong>Tips:</strong> zoom ke area Jawa Barat untuk memuat point berdasarkan viewport. Klik map untuk menaruh point baru.
-                    Boundary layer memakai PMTiles dari API. Source-layer diasumsikan <code>regions</code>.
+                    Boundary layer memakai PMTiles dari API. Semua source-layer dimuat otomatis dari metadata.
                 </div>
             </div>
         </main>
@@ -331,23 +293,19 @@
     const maplibregl = window.maplibregl;
     const pmtiles = window.pmtiles;
 
-    if (!maplibregl) {
-        throw new Error('MapLibre GL JS gagal dimuat dari CDN.');
-    }
+    if (!maplibregl) throw new Error('MapLibre GL JS gagal dimuat dari CDN.');
+    if (!pmtiles) throw new Error('PMTiles gagal dimuat dari CDN.');
 
-    if (!pmtiles) {
-        throw new Error('PMTiles gagal dimuat dari CDN.');
-    }
-
+    // Register protocol sekali saja di level module
     const protocol = new pmtiles.Protocol();
     maplibregl.addProtocol('pmtiles', protocol.tile);
 
     const apiBase = '/api';
+
     const state = {
         map: null,
-        activeTileset: null,
-        sourceUrl: null,
-        regionSourceLayer: 'regions',
+        activeTilesetId: null,
+        regionLayerIds: [],   // track semua layer ID agar bisa dibersihkan
         pointDraftMarker: null,
         isImporting: false,
         isSavingPoint: false,
@@ -355,27 +313,29 @@
     };
 
     const els = {
-        tilesetStatus: document.getElementById('tilesetStatus'),
-        tilesetList: document.getElementById('tilesetList'),
-        tilesetHint: document.getElementById('tilesetHint'),
-        pointCount: document.getElementById('pointCount'),
-        viewportCount: document.getElementById('viewportCount'),
-        bboxNorth: document.getElementById('bboxNorth'),
-        bboxSouth: document.getElementById('bboxSouth'),
-        bboxEast: document.getElementById('bboxEast'),
-        bboxWest: document.getElementById('bboxWest'),
-        logList: document.getElementById('logList'),
-        importForm: document.getElementById('importForm'),
-        pointForm: document.getElementById('pointForm'),
-        importButton: document.getElementById('importButton'),
-        pointButton: document.getElementById('pointButton'),
-        refreshButton: document.getElementById('refreshButton'),
+        tilesetStatus:   document.getElementById('tilesetStatus'),
+        tilesetList:     document.getElementById('tilesetList'),
+        tilesetHint:     document.getElementById('tilesetHint'),
+        pointCount:      document.getElementById('pointCount'),
+        viewportCount:   document.getElementById('viewportCount'),
+        bboxNorth:       document.getElementById('bboxNorth'),
+        bboxSouth:       document.getElementById('bboxSouth'),
+        bboxEast:        document.getElementById('bboxEast'),
+        bboxWest:        document.getElementById('bboxWest'),
+        logList:         document.getElementById('logList'),
+        importForm:      document.getElementById('importForm'),
+        pointForm:       document.getElementById('pointForm'),
+        importButton:    document.getElementById('importButton'),
+        pointButton:     document.getElementById('pointButton'),
+        refreshButton:   document.getElementById('refreshButton'),
         useMapClickButton: document.getElementById('useMapClickButton'),
-        title: document.getElementById('title'),
-        description: document.getElementById('description'),
-        latitude: document.getElementById('latitude'),
-        longitude: document.getElementById('longitude'),
+        title:           document.getElementById('title'),
+        description:     document.getElementById('description'),
+        latitude:        document.getElementById('latitude'),
+        longitude:       document.getElementById('longitude'),
     };
+
+    // ─── Base map style ───────────────────────────────────────────────────────
 
     const baseStyle = {
         version: 8,
@@ -383,7 +343,11 @@
         sources: {
             osm: {
                 type: 'raster',
-                tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+                tiles: [
+                    'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                ],
                 tileSize: 256,
                 attribution: '&copy; OpenStreetMap contributors',
             },
@@ -425,6 +389,8 @@
         ],
     };
 
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
     function log(message, tone = 'info') {
         const colors = {
             info: 'rgba(255,255,255,0.03)',
@@ -432,7 +398,6 @@
             warn: 'rgba(255,191,102,0.14)',
             error: 'rgba(255,107,122,0.14)',
         };
-
         const node = document.createElement('div');
         node.className = 'item';
         node.style.background = colors[tone] ?? colors.info;
@@ -443,88 +408,10 @@
         }
     }
 
-    function setStatus(text) {
-        els.tilesetStatus.textContent = text;
-    }
+    function setStatus(text) { els.tilesetStatus.textContent = text; }
 
     function toAbsoluteUrl(url) {
         return new URL(url, window.location.origin).toString();
-    }
-
-    function updateBBoxDisplay() {
-        const bounds = state.map.getBounds();
-        const north = bounds.getNorth().toFixed(6);
-        const south = bounds.getSouth().toFixed(6);
-        const east = bounds.getEast().toFixed(6);
-        const west = bounds.getWest().toFixed(6);
-
-        els.bboxNorth.textContent = north;
-        els.bboxSouth.textContent = south;
-        els.bboxEast.textContent = east;
-        els.bboxWest.textContent = west;
-
-        return { north, south, east, west };
-    }
-
-    function removeRegionLayers() {
-        ['regions-label', 'regions-line', 'regions-fill'].forEach((layerId) => {
-            if (state.map.getLayer(layerId)) {
-                state.map.removeLayer(layerId);
-            }
-        });
-
-        if (state.map.getSource('regions')) {
-            state.map.removeSource('regions');
-        }
-    }
-
-    function ensureRegionSource(tileset) {
-        if (!tileset?.url) {
-            return;
-        }
-
-        const nextSourceUrl = `pmtiles://${toAbsoluteUrl(tileset.url)}`;
-
-        if (state.sourceUrl === nextSourceUrl && state.map.getSource('regions')) {
-            return;
-        }
-
-        removeRegionLayers();
-        state.map.addSource('regions', {
-            type: 'vector',
-            url: nextSourceUrl,
-        });
-        state.sourceUrl = nextSourceUrl;
-    }
-
-    async function detectRegionSourceLayer(tileset) {
-        let nextLayer = 'regions';
-
-        const metadataLayers = tileset?.metadata?.vector_layers;
-        if (Array.isArray(metadataLayers) && metadataLayers.length && metadataLayers[0]?.id) {
-            return metadataLayers[0].id;
-        }
-
-        try {
-            const pmtilesUrl = toAbsoluteUrl(tileset.url);
-            const archive = new pmtiles.PMTiles(pmtilesUrl);
-            protocol.add(archive);
-            const metadata = await archive.getMetadata();
-            const vectorLayers = metadata?.vector_layers;
-
-            if (typeof vectorLayers === 'string') {
-                const parsedLayers = JSON.parse(vectorLayers);
-                if (Array.isArray(parsedLayers) && parsedLayers.length && parsedLayers[0]?.id) {
-                    nextLayer = parsedLayers[0].id;
-                }
-            } else if (Array.isArray(vectorLayers) && vectorLayers.length && vectorLayers[0]?.id) {
-                nextLayer = vectorLayers[0].id;
-            }
-        } catch (_error) {
-            // Fallback to default source-layer name.
-        }
-
-        return nextLayer;
     }
 
     async function fetchJson(url, options = {}) {
@@ -532,12 +419,180 @@
             headers: { Accept: 'application/json', ...(options.headers || {}) },
             ...options,
         });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+    }
 
-        if (!response.ok) {
-            throw new Error(await response.text());
+    // ─── BBox ────────────────────────────────────────────────────────────────
+
+    function updateBBoxDisplay() {
+        const bounds = state.map.getBounds();
+        const north = bounds.getNorth().toFixed(6);
+        const south = bounds.getSouth().toFixed(6);
+        const east  = bounds.getEast().toFixed(6);
+        const west  = bounds.getWest().toFixed(6);
+        els.bboxNorth.textContent = north;
+        els.bboxSouth.textContent = south;
+        els.bboxEast.textContent  = east;
+        els.bboxWest.textContent  = west;
+        return { north, south, east, west };
+    }
+
+    // ─── Region layers ────────────────────────────────────────────────────────
+
+    /**
+     * Hapus semua layer & source regions yang sebelumnya ditambahkan.
+     * Bergantung pada state.regionLayerIds untuk tracking.
+     */
+    function removeRegionLayers() {
+        for (const layerId of state.regionLayerIds) {
+            if (state.map.getLayer(layerId)) {
+                state.map.removeLayer(layerId);
+            }
+        }
+        state.regionLayerIds = [];
+
+        if (state.map.getSource('regions')) {
+            state.map.removeSource('regions');
+        }
+    }
+
+    /**
+     * Tunggu hingga source tertentu benar-benar loaded oleh MapLibre.
+     * Menggunakan event 'sourcedata' agar tidak ada race condition.
+     */
+    function waitForSourceLoaded(sourceId) {
+        return new Promise((resolve) => {
+            // Jika sudah loaded sebelum listener terpasang, selesaikan langsung
+            if (state.map.isSourceLoaded(sourceId)) {
+                resolve();
+                return;
+            }
+
+            function onSourceData(e) {
+                if (e.sourceId === sourceId && state.map.isSourceLoaded(sourceId)) {
+                    state.map.off('sourcedata', onSourceData);
+                    resolve();
+                }
+            }
+
+            state.map.on('sourcedata', onSourceData);
+        });
+    }
+
+    /**
+     * Tambahkan fill + line layer untuk setiap vector_layer di metadata PMTiles.
+     * Tidak ada hardcode source-layer — semua dibaca dari metadata.
+     */
+    function addRegionLayers(vectorLayers) {
+        if (!Array.isArray(vectorLayers) || vectorLayers.length === 0) {
+            log('PMTiles tidak memiliki vector_layers di metadata.', 'warn');
+            return;
         }
 
-        return response.json();
+        for (const layer of vectorLayers) {
+            if (!layer?.id) continue;
+
+            const fillId = `regions-fill-${layer.id}`;
+            const lineId = `regions-line-${layer.id}`;
+
+            // Tambah fill layer — sebelum points agar tidak menimpa marker
+            state.map.addLayer(
+                {
+                    id: fillId,
+                    type: 'fill',
+                    source: 'regions',
+                    'source-layer': layer.id,
+                    paint: {
+                        'fill-color': '#58a7ff',
+                        'fill-opacity': 0.05,
+                    },
+                },
+                'points-circle', // insert sebelum layer points
+            );
+
+            // Tambah line layer
+            state.map.addLayer(
+                {
+                    id: lineId,
+                    type: 'line',
+                    source: 'regions',
+                    'source-layer': layer.id,
+                    paint: {
+                        'line-color': '#0d00ff',
+                        'line-width': [
+                            'interpolate', ['linear'], ['zoom'],
+                            4, 0.8,
+                            8, 1.4,
+                            12, 2.2,
+                        ],
+                        'line-opacity': 0.9,
+                    },
+                },
+                'points-circle',
+            );
+
+            // Daftarkan agar bisa dibersihkan nanti
+            state.regionLayerIds.push(fillId, lineId);
+
+            log(`Source-layer dimuat: ${layer.id}`, 'success');
+        }
+
+        log(`Total ${vectorLayers.length} source-layer ditambahkan.`, 'success');
+    }
+
+    // ─── Tileset ──────────────────────────────────────────────────────────────
+
+    async function selectTileset(id) {
+        if (state.activeTilesetId === id) return;
+
+        try {
+            setStatus('Memuat tileset...');
+            const detail = await fetchJson(`${apiBase}/pmtiles/${id}`);
+            const tileset = detail.data;
+
+            const pmtilesUrl = toAbsoluteUrl(tileset.url);
+
+            // Buat instance PMTiles & daftarkan ke protocol
+            const archive = new pmtiles.PMTiles(pmtilesUrl);
+            protocol.add(archive);
+
+            // Bersihkan layer & source lama
+            removeRegionLayers();
+
+            // Daftarkan source baru ke map
+            state.map.addSource('regions', {
+                type: 'vector',
+                url: `pmtiles://${pmtilesUrl}`,
+            });
+
+            // Tunggu source benar-benar loaded sebelum addLayer
+            await waitForSourceLoaded('regions');
+
+            // Baca metadata untuk mendapatkan daftar vector_layers
+            const metadata = await archive.getMetadata();
+            console.log('[PMTiles metadata]', metadata);
+
+            // vector_layers bisa ada di root atau di dalam json string
+            let vectorLayers = metadata?.vector_layers ?? [];
+
+            // Beberapa tools menyimpan vector_layers sebagai string JSON
+            if (typeof vectorLayers === 'string') {
+                try { vectorLayers = JSON.parse(vectorLayers); } catch { vectorLayers = []; }
+            }
+
+            if (!Array.isArray(vectorLayers)) vectorLayers = [];
+
+            // Tambahkan layer untuk setiap source-layer di metadata
+            addRegionLayers(vectorLayers);
+
+            state.activeTilesetId = id;
+            setStatus(`Aktif: ${tileset.name}`);
+            log(`Tileset aktif: ${tileset.name} (${vectorLayers.length} layer)`, 'success');
+        } catch (err) {
+            log(`Gagal memuat tileset: ${err.message}`, 'error');
+            setStatus('Gagal memuat tileset');
+        }
     }
 
     async function loadTilesets() {
@@ -548,11 +603,8 @@
             els.tilesetList.innerHTML = '<div class="item">Belum ada tileset. Upload GeoJSON untuk membuat PMTiles.</div>';
             els.tilesetHint.innerHTML = 'Tileset boundary belum tersedia.';
             setStatus('Belum ada tileset');
-            state.activeTileset = null;
-            state.sourceUrl = null;
-            if (state.map) {
-                removeRegionLayers();
-            }
+            state.activeTilesetId = null;
+            if (state.map) removeRegionLayers();
             return;
         }
 
@@ -568,106 +620,19 @@
             els.tilesetList.appendChild(button);
         });
 
-        if (!state.activeTileset) {
+        // Auto-pilih tileset pertama jika belum ada yang aktif
+        if (!state.activeTilesetId) {
             await selectTileset(items[0].id);
         }
     }
 
-    function ensureRegionLayers() {
-        if (!state.map.getSource('regions')) {
-            return;
-        }
-
-        if (state.map.getLayer('regions-fill')) {
-            return;
-        }
-
-        state.map.addLayer({
-            id: 'regions-fill',
-            type: 'fill',
-            source: 'regions',
-            'source-layer': state.regionSourceLayer,
-            paint: {
-                'fill-color': [
-                    'match',
-                    ['get', 'level'],
-                    'province', '#3b82f6',
-                    'regency', '#44c58e',
-                    'district', '#f59e0b',
-                    'village', '#ec4899',
-                    '#58a7ff',
-                ],
-                'fill-opacity': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    4, 0.12,
-                    8, 0.18,
-                    12, 0.24,
-                ],
-            },
-        });
-
-        state.map.addLayer({
-            id: 'regions-line',
-            type: 'line',
-            source: 'regions',
-            'source-layer': state.regionSourceLayer,
-            paint: {
-                'line-color': '#d8eefb',
-                'line-width': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    4, 0.6,
-                    8, 1.2,
-                    12, 2.2,
-                ],
-                'line-opacity': 0.85,
-            },
-        });
-
-        state.map.addLayer({
-            id: 'regions-label',
-            type: 'symbol',
-            source: 'regions',
-            'source-layer': state.regionSourceLayer,
-            layout: {
-                'text-field': ['coalesce', ['get', 'name'], ['get', 'code']],
-                'text-size': [
-                    'interpolate',
-                    ['linear'],
-                    ['zoom'],
-                    5, 10,
-                    10, 12,
-                    13, 14,
-                ],
-                'text-anchor': 'center',
-                'text-allow-overlap': false,
-            },
-            paint: {
-                'text-color': '#f4fbff',
-                'text-halo-color': '#06111f',
-                'text-halo-width': 1.6,
-            },
-        });
-    }
-
-    async function selectTileset(id) {
-        const detail = await fetchJson(`${apiBase}/pmtiles/${id}`);
-        const tileset = detail.data;
-        state.activeTileset = tileset;
-        state.regionSourceLayer = await detectRegionSourceLayer(tileset);
-        setStatus(`${tileset.name} (${tileset.status})`);
-        ensureRegionSource(tileset);
-        ensureRegionLayers();
-        els.tilesetHint.innerHTML = `Tileset aktif: <code>${tileset.filename}</code><br>Boundary layer: <code>${state.regionSourceLayer}</code>.`;
-        log(`Tileset aktif: ${tileset.name} (layer: ${state.regionSourceLayer})`, 'success');
-    }
+    // ─── Points ───────────────────────────────────────────────────────────────
 
     async function loadPoints() {
         const { north, south, east, west } = updateBBoxDisplay();
-        const payload = await fetchJson(`${apiBase}/points?north=${north}&south=${south}&east=${east}&west=${west}&limit=500`);
+        const payload = await fetchJson(
+            `${apiBase}/points?north=${north}&south=${south}&east=${east}&west=${west}&limit=500`
+        );
         const points = payload.data?.points || [];
 
         const features = points.map((point) => ({
@@ -686,37 +651,34 @@
         }));
 
         const source = state.map.getSource('points');
-        if (source) {
-            source.setData({ type: 'FeatureCollection', features });
-        }
+        if (source) source.setData({ type: 'FeatureCollection', features });
 
-        els.pointCount.textContent = String(points.length);
+        els.pointCount.textContent   = String(points.length);
         els.viewportCount.textContent = String(points.length);
-        log(`Memuat ${points.length} point dalam viewport.`, 'info');
+        log(`${points.length} point dimuat di viewport.`, 'info');
     }
 
     function schedulePointsRefresh() {
         clearTimeout(state.refreshTimer);
         state.refreshTimer = setTimeout(() => {
-            loadPoints().catch((error) => log(`Gagal memuat points: ${error.message}`, 'error'));
+            loadPoints().catch((err) => log(`Gagal memuat points: ${err.message}`, 'error'));
         }, 180);
     }
 
+    // ─── Draft marker ─────────────────────────────────────────────────────────
+
     function setDraftPoint(lngLat) {
-        els.latitude.value = lngLat.lat.toFixed(6);
+        els.latitude.value  = lngLat.lat.toFixed(6);
         els.longitude.value = lngLat.lng.toFixed(6);
 
-        if (state.pointDraftMarker) {
-            state.pointDraftMarker.remove();
-        }
+        if (state.pointDraftMarker) state.pointDraftMarker.remove();
 
         const el = document.createElement('div');
-        el.style.width = '18px';
-        el.style.height = '18px';
-        el.style.borderRadius = '50%';
-        el.style.border = '3px solid #06111f';
-        el.style.background = '#44c58e';
-        el.style.boxShadow = '0 0 24px rgba(68, 197, 142, 0.85)';
+        el.style.cssText = [
+            'width:18px', 'height:18px', 'border-radius:50%',
+            'border:3px solid #06111f', 'background:#44c58e',
+            'box-shadow:0 0 24px rgba(68,197,142,0.85)',
+        ].join(';');
 
         state.pointDraftMarker = new maplibregl.Marker({ element: el })
             .setLngLat([lngLat.lng, lngLat.lat])
@@ -725,12 +687,14 @@
         log(`Koordinat dipilih: ${lngLat.lat.toFixed(6)}, ${lngLat.lng.toFixed(6)}`, 'success');
     }
 
+    // ─── Map init ─────────────────────────────────────────────────────────────
+
     async function initMap() {
         state.map = new maplibregl.Map({
             container: 'map',
             style: baseStyle,
-            center: [107.6407614, -6.9625217],
-            zoom: 15,
+            center: [106.75, -6.65],
+            zoom: 8,
             attributionControl: true,
         });
 
@@ -738,8 +702,8 @@
 
         state.map.on('load', async () => {
             log('Map loaded.', 'success');
-            await loadPoints().catch((error) => log(`Gagal load points awal: ${error.message}`, 'error'));
-            await loadTilesets().catch((error) => log(`Gagal load tileset: ${error.message}`, 'error'));
+            await loadPoints().catch((err) => log(`Gagal load points awal: ${err.message}`, 'error'));
+            await loadTilesets().catch((err) => log(`Gagal load tileset: ${err.message}`, 'error'));
         });
 
         state.map.on('moveend', schedulePointsRefresh);
@@ -747,31 +711,32 @@
         state.map.on('click', (event) => setDraftPoint(event.lngLat));
     }
 
+    // ─── Form handlers ────────────────────────────────────────────────────────
+
     els.importForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-
         if (state.isImporting) return;
-
         state.isImporting = true;
         els.importButton.disabled = true;
         els.importButton.textContent = 'Mengupload...';
 
         try {
-            const formData = new FormData(els.importForm);
             const response = await fetch(`${apiBase}/pmtiles/import`, {
                 method: 'POST',
-                body: formData,
+                headers: {
+                    Accept: 'application/json',
+                },
+                body: new FormData(els.importForm),
             });
-
-            if (!response.ok) {
-                throw new Error(await response.text());
-            }
-
+            if (!response.ok) throw new Error(await response.text());
             const payload = await response.json();
             log(payload.message || 'Import berhasil', 'success');
+
+            // Reset agar tileset baru bisa auto-select
+            state.activeTilesetId = null;
             await loadTilesets();
-        } catch (error) {
-            log(`Import gagal: ${error.message}`, 'error');
+        } catch (err) {
+            log(`Import gagal: ${err.message}`, 'error');
         } finally {
             state.isImporting = false;
             els.importButton.disabled = false;
@@ -781,9 +746,7 @@
 
     els.pointForm.addEventListener('submit', async (event) => {
         event.preventDefault();
-
         if (state.isSavingPoint) return;
-
         state.isSavingPoint = true;
         els.pointButton.disabled = true;
         els.pointButton.textContent = 'Menyimpan...';
@@ -795,25 +758,21 @@
                 body: JSON.stringify({
                     title: els.title.value,
                     description: els.description.value,
-                    latitude: Number(els.latitude.value),
+                    latitude:  Number(els.latitude.value),
                     longitude: Number(els.longitude.value),
                 }),
             });
-
-            if (!response.ok) {
-                throw new Error(await response.text());
-            }
-
+            if (!response.ok) throw new Error(await response.text());
             const payload = await response.json();
-            log(`Point tersimpan dengan id ${payload.data.id}.`, 'success');
+            log(`Point tersimpan: id ${payload.data.id}`, 'success');
             els.pointForm.reset();
             if (state.pointDraftMarker) {
                 state.pointDraftMarker.remove();
                 state.pointDraftMarker = null;
             }
             await loadPoints();
-        } catch (error) {
-            log(`Simpan point gagal: ${error.message}`, 'error');
+        } catch (err) {
+            log(`Simpan point gagal: ${err.message}`, 'error');
         } finally {
             state.isSavingPoint = false;
             els.pointButton.disabled = false;
@@ -826,8 +785,8 @@
             await loadPoints();
             await loadTilesets();
             log('Data berhasil di-refresh.', 'success');
-        } catch (error) {
-            log(`Refresh gagal: ${error.message}`, 'error');
+        } catch (err) {
+            log(`Refresh gagal: ${err.message}`, 'error');
         }
     });
 
@@ -835,8 +794,8 @@
         log('Klik peta untuk mengisi koordinat point.', 'info');
     });
 
-    initMap().catch((error) => {
-        log(`Inisialisasi map gagal: ${error.message}`, 'error');
+    initMap().catch((err) => {
+        log(`Inisialisasi map gagal: ${err.message}`, 'error');
         setStatus('Map gagal dimuat');
     });
 </script>

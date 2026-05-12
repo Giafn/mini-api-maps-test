@@ -6,6 +6,7 @@ use App\Http\Requests\ImportPmtilesRequest;
 use App\Models\Tileset;
 use App\Services\PmtilesGeneratorService;
 use Exception;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class PmtilesController extends ApiController
@@ -17,7 +18,7 @@ class PmtilesController extends ApiController
                 'id' => $t->id,
                 'name' => $t->name,
                 'filename' => $t->filename,
-                'url' => '/storage/pmtiles/'.$t->filename,
+                'url' => route('pmtiles.file', ['tileset' => $t]),
                 'created_at' => $t->created_at,
             ];
         });
@@ -31,10 +32,21 @@ class PmtilesController extends ApiController
             'id' => $tileset->id,
             'name' => $tileset->name,
             'filename' => $tileset->filename,
-            'url' => '/storage/pmtiles/'.$tileset->filename,
+            'url' => route('pmtiles.file', ['tileset' => $tileset]),
             'status' => $tileset->status,
             'metadata' => $tileset->metadata,
             'created_at' => $tileset->created_at,
+        ]);
+    }
+
+    public function file(Tileset $tileset)
+    {
+        $relativePath = 'pmtiles/'.$tileset->filename;
+
+        abort_unless(Storage::disk('public')->exists($relativePath), 404);
+
+        return response()->file(Storage::disk('public')->path($relativePath), [
+            'Content-Type' => 'application/octet-stream',
         ]);
     }
 
