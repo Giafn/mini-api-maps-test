@@ -1,0 +1,13 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+        "title": "Laravel",
+        "version": "1.0",
+        "description": "Jawa Barat PMTiles API (POC)"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000/api"
+        }
+    ]
+}

@@ -1,0 +1,199 @@
+openapi: 3.0.3
+info:
+  title: Jawa Barat PMTiles API (POC)
+  version: '1.0.0'
+  description: API untuk import GeoJSON -> PMTiles dan penyimpanan marker point. Didesain untuk MapLibre GL JS frontend.
+servers:
+  - url: / 
+paths:
+  /api/pmtiles/import:
+    post:
+      summary: Import multiple GeoJSON files and generate PMTiles
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: Import started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResponse'
+  /api/pmtiles:
+    get:
+      summary: List tilesets
+      responses:
+        '200':
+          description: List of tilesets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tileset'
+  /api/pmtiles/{id}:
+    get:
+      summary: Tileset metadata
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Tileset detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TilesetDetail'
+  /api/points:
+    post:
+      summary: Create a map point
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePoint'
+      responses:
+        '201':
+          description: Point created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+    get:
+      summary: Query points by viewport (bbox)
+      parameters:
+        - name: north
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: south
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: east
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: west
+          in: query
+          required: true
+          schema:
+            type: number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 500
+      responses:
+        '200':
+          description: Points within bbox
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      points:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Point'
+components:
+  schemas:
+    ImportResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+    Tileset:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        filename:
+          type: string
+        url:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    TilesetDetail:
+      allOf:
+        - $ref: '#/components/schemas/Tileset'
+        - type: object
+          properties:
+            status:
+              type: string
+            metadata:
+              type: object
+    CreatePoint:
+      type: object
+      required: [title, latitude, longitude]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+    Point:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        geometry:
+          type: object
+          description: GeoJSON geometry object

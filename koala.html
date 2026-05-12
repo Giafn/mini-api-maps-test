@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>MapLibre + PMTiles</title>
+
+  <link
+    href="https://unpkg.com/maplibre-gl@5.3.0/dist/maplibre-gl.css"
+    rel="stylesheet"
+  />
+
+  <style>
+    body {
+      margin: 0;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+    }
+  </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/maplibre-gl@5.3.0/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/pmtiles@4.3.0/dist/pmtiles.js"></script>
+
+<script>
+  // register protocol pmtiles://
+  const protocol = new pmtiles.Protocol();
+  maplibregl.addProtocol("pmtiles", protocol.tile);
+
+  // lokasi file pmtiles
+  const PMTILES_URL = "pmtiles://./bandung.pmtiles";
+
+  const map = new maplibregl.Map({
+    container: "map",
+
+    style: {
+      version: 8,
+
+      sources: {
+        example_source: {
+          type: "vector",
+          url: PMTILES_URL
+        }
+      },
+
+      layers: [
+        {
+          id: "water",
+          type: "fill",
+          source: "example_source",
+          "source-layer": "water",
+          paint: {
+            "fill-color": "#7ec8e3"
+          }
+        },
+        {
+          id: "roads",
+          type: "line",
+          source: "example_source",
+          "source-layer": "road",
+          paint: {
+            "line-color": "#ffffff",
+            "line-width": 1.5
+          }
+        },
+        {
+          id: "buildings",
+          type: "fill",
+          source: "example_source",
+          "source-layer": "building",
+          paint: {
+            "fill-color": "#d9d0c9"
+          }
+        }
+      ]
+    },
+
+    center: [107.6407614, -6.9625217],
+    zoom: 15
+  });
+
+  map.addControl(new maplibregl.NavigationControl());
+
+  // bbox viewport
+  map.on("moveend", () => {
+    const b = map.getBounds();
+
+    const url =
+      `http://127.0.0.1:8000/api/points` +
+      `?north=${b.getNorth()}` +
+      `&south=${b.getSouth()}` +
+      `&east=${b.getEast()}` +
+      `&west=${b.getWest()}`;
+
+    console.log(url);
+  });
+</script>
+
+</body>
+</html>
