@@ -214,6 +214,16 @@
             </section>
 
             <section class="panel">
+                <h2>Basemap / Terrain</h2>
+                <div class="stack">
+                    <label><input type="radio" name="terrain" value="base-osm"> OpenStreetMap</label>
+                    <label><input type="radio" name="terrain" value="base-topo"> OpenTopoMap</label>
+                    <label><input type="radio" name="terrain" value="base-carto"> Carto Voyager</label>
+                    <label><input type="radio" name="terrain" value="base-esri" checked> Satellite (Esri)</label>
+                </div>
+            </section>
+
+            <section class="panel">
                 <h2>Import GeoJSON → PMTiles</h2>
                 <form id="importForm" class="stack">
                     <div>
@@ -310,6 +320,7 @@
         isImporting: false,
         isSavingPoint: false,
         refreshTimer: null,
+        tileErrorLog: {},
     };
 
     const els = {
@@ -335,7 +346,26 @@
         longitude:       document.getElementById('longitude'),
     };
 
-    // ─── Base map style ───────────────────────────────────────────────────────
+    // Batas tampilan peta untuk menampilkan seluruh Jawa Barat
+    const MAP_LIMITS = {
+        west: 105.893100,
+        east: 109.730890,
+        north: -5.462349,
+        south: -8.357236,
+    };
+
+    const INITIAL_BOUNDS_ARRAY = [[MAP_LIMITS.west, MAP_LIMITS.south], [MAP_LIMITS.east, MAP_LIMITS.north]];
+    const SIDEBAR_WIDTH = 376;
+    const TILE_ERROR_THRESHOLD = 6; // number of tile errors before fallback
+    const TILE_ERROR_WINDOW_MS = 6000; // time window to count errors
+    const PROVIDER_TO_LAYER = {
+        'opentopomap': 'base-topo',
+        'cartocdn.com': 'base-carto',
+        'arcgisonline.com': 'base-esri',
+        'tile.openstreetmap.org': 'base-osm',
+    };
+
+    // ─── Base map style (multiple basemap sources) ───────────────────────────
 
     const baseStyle = {
         version: 8,
@@ -351,28 +381,106 @@
                 tileSize: 256,
                 attribution: '&copy; OpenStreetMap contributors',
             },
+            topo: {
+                type: 'raster',
+                tiles: [
+                    'https://a.tile.opentopomap.org/{z}/{x}/{y}.png',
+                    'https://b.tile.opentopomap.org/{z}/{x}/{y}.png',
+                    'https://c.tile.opentopomap.org/{z}/{x}/{y}.png',
+                ],
+                tileSize: 256,
+                attribution: 'Map tiles: © OpenTopoMap (CC-BY-SA)',
+            },
+            carto: {
+                type: 'raster',
+                tiles: [
+                    'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                    'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                    'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                    'https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+                ],
+                tileSize: 256,
+                attribution: 'Carto',
+            },
+            esri: {
+                type: 'raster',
+                tiles: [
+                    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                ],
+                tileSize: 256,
+                attribution: 'Esri',
+            },
             points: {
                 type: 'geojson',
                 data: { type: 'FeatureCollection', features: [] },
+                cluster: true,
+                clusterRadius: 50,
+                clusterMaxZoom: 14,
             },
         },
         layers: [
-            { id: 'osm', type: 'raster', source: 'osm' },
+            // Base raster layers (only one visible at a time)
+            { id: 'base-osm', type: 'raster', source: 'osm', layout: { visibility: 'none' } },
+            { id: 'base-topo', type: 'raster', source: 'topo', layout: { visibility: 'none' } },
+            { id: 'base-carto', type: 'raster', source: 'carto', layout: { visibility: 'none' } },
+            { id: 'base-esri', type: 'raster', source: 'esri', layout: { visibility: 'visible' } },
+
+            // Cluster circles
             {
-                id: 'points-circle',
+                id: 'clusters',
                 type: 'circle',
                 source: 'points',
+                filter: ['has', 'point_count'],
+                paint: {
+                    'circle-color': [
+                        'step', ['get', 'point_count'],
+                        '#7dd3fc', 10, '#58a7ff', 50, '#2b8cff', 250, '#0d47a1'
+                    ],
+                    'circle-radius': [
+                        'step', ['get', 'point_count'],
+                        12, 10, 18, 50, 26, 250, 36
+                    ],
+                    'circle-opacity': 0.9,
+                    'circle-stroke-color': '#06111f',
+                    'circle-stroke-width': 1.5,
+                },
+            },
+
+            // Cluster count label
+            {
+                id: 'cluster-count',
+                type: 'symbol',
+                source: 'points',
+                filter: ['has', 'point_count'],
+                layout: {
+                    'text-field': '{point_count_abbreviated}',
+                    'text-font': ['Noto Sans Regular'],
+                    'text-size': 12,
+                },
+                paint: {
+                    'text-color': '#06111f',
+                },
+            },
+
+            // Unclustered points (single points)
+            {
+                id: 'unclustered-point',
+                type: 'circle',
+                source: 'points',
+                filter: ['!', ['has', 'point_count']],
                 paint: {
                     'circle-radius': 7,
-                    'circle-color': '#44c58e',
+                    'circle-color': '#c54444',
                     'circle-stroke-color': '#06111f',
                     'circle-stroke-width': 2,
                 },
             },
+
             {
-                id: 'points-label',
+                id: 'unclustered-label',
                 type: 'symbol',
                 source: 'points',
+                filter: ['!', ['has', 'point_count']],
                 layout: {
                     'text-field': ['get', 'title'],
                     'text-font': ['Noto Sans Regular'],
@@ -490,55 +598,60 @@
             return;
         }
 
+        // Cari layer point yang tersedia untuk menjadi referensi insert-before.
+        const preferredPointLayers = ['clusters', 'unclustered-point', 'cluster-count', 'unclustered-label'];
+        const insertBefore = preferredPointLayers.find((id) => state.map.getLayer(id));
+
         for (const layer of vectorLayers) {
             if (!layer?.id) continue;
-
             const fillId = `regions-fill-${layer.id}`;
             const lineId = `regions-line-${layer.id}`;
 
-            // Tambah fill layer — sebelum points agar tidak menimpa marker
-            state.map.addLayer(
-                {
-                    id: fillId,
-                    type: 'fill',
-                    source: 'regions',
-                    'source-layer': layer.id,
-                    paint: {
-                        'fill-color': '#58a7ff',
-                        'fill-opacity': 0.05,
-                    },
+            const fillLayer = {
+                id: fillId,
+                type: 'fill',
+                source: 'regions',
+                'source-layer': layer.id,
+                paint: {
+                    // invisible fill used only for hit-testing / selecting features
+                    'fill-color': '#000000',
+                    'fill-opacity': 0,
                 },
-                'points-circle', // insert sebelum layer points
-            );
+            };
 
-            // Tambah line layer
-            state.map.addLayer(
-                {
-                    id: lineId,
-                    type: 'line',
-                    source: 'regions',
-                    'source-layer': layer.id,
-                    paint: {
-                        'line-color': '#0d00ff',
-                        'line-width': [
-                            'interpolate', ['linear'], ['zoom'],
-                            4, 0.8,
-                            8, 1.4,
-                            12, 2.2,
-                        ],
-                        'line-opacity': 0.9,
-                    },
+            const lineLayer = {
+                id: lineId,
+                type: 'line',
+                source: 'regions',
+                'source-layer': layer.id,
+                paint: {
+                    'line-color': '#040055',
+                    'line-width': [
+                        'interpolate', ['linear'], ['zoom'],
+                        4, 0.8,
+                        8, 1.4,
+                        12, 2.2,
+                    ],
+                    'line-opacity': 0.9,
                 },
-                'points-circle',
-            );
+            };
 
-            // Daftarkan agar bisa dibersihkan nanti
+            // Tambahkan fill terlebih dahulu (invisible), lalu line agar border terlihat di atasnya.
+            if (insertBefore) {
+                state.map.addLayer(fillLayer, insertBefore);
+                state.map.addLayer(lineLayer, insertBefore);
+            } else {
+                state.map.addLayer(fillLayer);
+                state.map.addLayer(lineLayer);
+            }
+
+            // Daftarkan agar bisa dibersihkan nanti (isi fill dulu agar queryRenderedFeatures mudah)
             state.regionLayerIds.push(fillId, lineId);
 
             log(`Source-layer dimuat: ${layer.id}`, 'success');
         }
 
-        log(`Total ${vectorLayers.length} source-layer ditambahkan.`, 'success');
+        log(`Total ${vectorLayers.length} source-layer (line only) ditambahkan.`, 'success');
     }
 
     // ─── Tileset ──────────────────────────────────────────────────────────────
@@ -671,6 +784,53 @@
         els.latitude.value  = lngLat.lat.toFixed(6);
         els.longitude.value = lngLat.lng.toFixed(6);
 
+        // Reset title/description by default
+        els.title.value = '';
+        els.description.value = '';
+
+        // Try to prefill title/description from region feature properties at clicked point
+        try {
+            const pt = state.map.project([lngLat.lng, lngLat.lat]);
+            const features = state.map.queryRenderedFeatures(pt, { layers: state.regionLayerIds });
+            if (features && features.length) {
+                // Prefer common name-like properties
+                const nameKeys = [
+                    'WADMKC','WADMKK','WADMPR','METADATA','KDCPUM','KDPKAB','KDPPUM',
+                    'title','name','nama','Nama','NAME','label','display_name','nama_lengkap','display'
+                ];
+                const descKeys = ['description','desc','keterangan','notes','note','METADATA','UPDATED','metadata','updated'];
+
+                let chosenProps = null;
+                for (const f of features) {
+                    const p = f.properties || {};
+                    for (const k of nameKeys) {
+                        if (p[k]) { chosenProps = p; break; }
+                    }
+                    if (chosenProps) break;
+                }
+
+                // fallback to first feature props if none matched
+                if (!chosenProps) chosenProps = features[0].properties || {};
+
+                // Prefer readable admin names if available (subdistrict + city)
+                if (chosenProps.WADMKC) {
+                    const city = chosenProps.WADMKK || chosenProps.WADMPR || '';
+                    els.title.value = String(chosenProps.WADMKC) + (city ? ', ' + String(city) : '');
+                } else {
+                    for (const k of nameKeys) {
+                        if (chosenProps[k]) { els.title.value = String(chosenProps[k]).trim(); break; }
+                    }
+                }
+
+                for (const k of descKeys) {
+                    if (chosenProps[k]) { els.description.value = String(chosenProps[k]).trim(); break; }
+                }
+            }
+        } catch (e) {
+            // non-fatal
+            console.debug('Prefill properties failed', e);
+        }
+
         if (state.pointDraftMarker) state.pointDraftMarker.remove();
 
         const el = document.createElement('div');
@@ -693,22 +853,83 @@
         state.map = new maplibregl.Map({
             container: 'map',
             style: baseStyle,
-            center: [106.75, -6.65],
+            // center set roughly to middle of provided bounds; fitBounds will adjust zoom
+            center: [ (MAP_LIMITS.west + MAP_LIMITS.east) / 2, (MAP_LIMITS.north + MAP_LIMITS.south) / 2 ],
             zoom: 8,
+            // Batasi seberapa jauh user bisa zoom untuk mencegah permintaan tile yang terlalu tinggi
+            maxZoom: 16,
+            // Batasi panning agar user tidak keluar dari area Jawa Barat
+            maxBounds: INITIAL_BOUNDS_ARRAY,
             attributionControl: true,
         });
 
         state.map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+        // Do not auto-switch terrain on tile/network errors; only log for debugging
+        state.map.on('error', (e) => {
+            try {
+                console.debug('Map tile/network error (auto-fallback disabled):', e);
+            } catch (err) {
+                // ignore
+            }
+        });
+
         state.map.on('load', async () => {
             log('Map loaded.', 'success');
+
+            // Pastikan tampilan awal menampilkan seluruh bounding box Jawa Barat
+            try {
+                const padding = { left: SIDEBAR_WIDTH + 16, right: 16, top: 16, bottom: 16 };
+                state.map.fitBounds(INITIAL_BOUNDS_ARRAY, { padding, duration: 0 });
+                // setMaxBounds agar panning dibatasi baik saat resize maupun gesture
+                state.map.setMaxBounds(INITIAL_BOUNDS_ARRAY);
+            } catch (e) {
+                // Non-fatal
+                console.warn('Gagal fitBounds pada inisialisasi:', e);
+            }
+
             await loadPoints().catch((err) => log(`Gagal load points awal: ${err.message}`, 'error'));
             await loadTilesets().catch((err) => log(`Gagal load tileset: ${err.message}`, 'error'));
+
+            // Apply selected basemap (if any)
+            try {
+                const sel = document.querySelector('input[name="terrain"]:checked');
+                if (sel) setTerrain(sel.value);
+                else setTerrain('base-esri');
+            } catch (e) { /* non-fatal */ }
+
+            // Cluster interactions
+            state.map.on('click', 'clusters', (e) => {
+                const features = state.map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+                if (!features.length) return;
+                const clusterId = features[0].properties.cluster_id;
+                state.map.getSource('points').getClusterExpansionZoom(clusterId, (err, zoom) => {
+                    if (err) { log(`Cluster expansion failed: ${err.message}`, 'error'); return; }
+                    state.map.easeTo({ center: features[0].geometry.coordinates, zoom });
+                });
+            });
+
+            state.map.on('mouseenter', 'clusters', () => { state.map.getCanvas().style.cursor = 'pointer'; });
+            state.map.on('mouseleave', 'clusters', () => { state.map.getCanvas().style.cursor = ''; });
+
+            state.map.on('click', 'unclustered-point', (e) => {
+                const f = e.features && e.features[0];
+                if (!f) return;
+                const coords = f.geometry.coordinates.slice();
+                const title = f.properties && f.properties.title ? f.properties.title : '';
+                const desc = f.properties && f.properties.description ? f.properties.description : '';
+                new maplibregl.Popup().setLngLat(coords).setHTML(`<strong>${title}</strong><div>${desc}</div>`).addTo(state.map);
+            });
         });
 
         state.map.on('moveend', schedulePointsRefresh);
         state.map.on('zoomend', schedulePointsRefresh);
-        state.map.on('click', (event) => setDraftPoint(event.lngLat));
+        // Only set draft point when user clicks on empty map (not on cluster/point)
+        state.map.on('click', (event) => {
+            const features = state.map.queryRenderedFeatures(event.point, { layers: ['clusters', 'unclustered-point'] });
+            if (features.length) return;
+            setDraftPoint(event.lngLat);
+        });
     }
 
     // ─── Form handlers ────────────────────────────────────────────────────────
@@ -792,6 +1013,33 @@
 
     els.useMapClickButton.addEventListener('click', () => {
         log('Klik peta untuk mengisi koordinat point.', 'info');
+    });
+
+    // Basemap / terrain switching
+    const BASE_LAYERS = ['base-osm', 'base-topo', 'base-carto', 'base-esri'];
+
+    function setTerrain(layerId) {
+        state.selectedTerrain = layerId;
+        if (!state.map) return;
+        for (const lid of BASE_LAYERS) {
+            if (!state.map.getLayer(lid)) continue;
+            const vis = (lid === layerId) ? 'visible' : 'none';
+            try { state.map.setLayoutProperty(lid, 'visibility', vis); } catch (e) { /* ignore */ }
+        }
+        const labelMap = {
+            'base-osm': 'OpenStreetMap',
+            'base-topo': 'OpenTopoMap',
+            'base-carto': 'Carto Voyager',
+            'base-esri': 'Esri Satellite',
+        };
+        log(`Basemap dipilih: ${labelMap[layerId] || layerId}`, 'info');
+    }
+
+    // Attach radio listeners
+    document.querySelectorAll('input[name="terrain"]').forEach((el) => {
+        el.addEventListener('change', (e) => {
+            if (e.target.checked) setTerrain(e.target.value);
+        });
     });
 
     initMap().catch((err) => {
